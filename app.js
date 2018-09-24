@@ -215,18 +215,20 @@ function down(event) {
 				storageHexes.push(hex)
 			}
 		} else {
-			var newHex = Hex.makeToFit(pos, false)
-			if (!newHex.isEmpty()) {
-				var selHex = storageHexes[selectedHex]
-				var matches = true
-				newHex.mask.forEach((v, i) => {
-					if (v && !selHex.mask[i]) matches = false
-				})
+			if (!(pos.join(",") in placedHexes)) {
+				var newHex = Hex.makeToFit(pos, false)
+				if (!newHex.isEmpty()) {
+					var selHex = storageHexes[selectedHex]
+					var matches = true
+					newHex.mask.forEach((v, i) => {
+						if (v && !selHex.mask[i]) matches = false
+					})
 
-				if (matches) {
-					placedHexes[pos.join(",")] = selHex
-					storageHexes.splice(selectedHex, 1)
-					selectedHex = null
+					if (matches) {
+						placedHexes[pos.join(",")] = selHex
+						storageHexes.splice(selectedHex, 1)
+						selectedHex = null
+					}
 				}
 			}
 		}
