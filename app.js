@@ -81,6 +81,10 @@ class Hex {
 
 var hexRadius = 100
 var genIterations = 2
+var minTiles = 3
+var maxTiles = 6
+var middleClicked = 0
+var settings = false
 var ctx = null
 /**
  * @type {Object<string,Hex>}
@@ -94,6 +98,7 @@ var storageHexes = []
 
 function setup() {
 	ctx = B.canvas.toCtx()
+	var tries = 0
 	do {
 		placedHexes["0,0"] = Hex.makeRandom()
 		for (let it = 0; it < genIterations; it++) {
@@ -125,37 +130,54 @@ function setup() {
 		})
 
 		placedHexes = { "0,0": zero }
-	} while (storageHexes.length < 3 || storageHexes.length > 6)
+		tries++;
+		if (tries > 1000) {
+			alert("Tiles with selected settings could not be generated")
+			break;
+		}
+	} while ((storageHexes.length < minTiles || storageHexes.length > maxTiles))
 }
 
 function update() {
-
-	hexRadius = Math.floor(window.getSize()[1] / 8)
-	if (storageHexes.length <= 0) {
-		setup()
-
-		ctx.setColor(colors.green).fill()
-		return
-	}
-
 	var size = ctx.getSize()
 	ctx.setSize(window.getSize())
-	ctx.setColor(colors.black).fill()
-	ctx.setColor(colors.white).line([hexRadius + 20, 0], [hexRadius + 20, size[1]])
-	placedHexes.toArray().forEach((v, i) => {
-		var pos = v.key.split(",").map(v => parseInt(v))
-		drawHex(transform(pos), v.value)
-	})
+	ctx.setColor(colors.black).fill().setColor(colors.white)
+	if (settings) {
+		var division = ctx.getSize()[1] / 4
+		repeat(4, (i) => {
+			var pos = [size[0] / 2, division * i + division / 2]
+			ctx.text(pos, 20, [
+				"Iterations: " + genIterations,
+				"Max Tiles: " + maxTiles,
+				"Min Tiles: " + minTiles,
+				"Back  <>  Regenerate"
+			][i], true)
+		})
+	} else {
+		hexRadius = Math.min(Math.floor(window.getSize()[1] / 8), Math.floor(window.getSize()[0] / 8))
+		if (storageHexes.length <= 0) {
+			setup()
 
-	storageHexes.forEach((v, i) => {
-		var pos = [hexRadius / 2 + 10, hexRadius / 2 + 10 + hexRadius * i]
-		if (i == selectedHex) {
-			ctx.setColor(colors.green)
-			drawHex(pos.add([1, 1]), v)
-			ctx.setColor(colors.white)
+			ctx.setColor(colors.green).fill()
+			return
 		}
-		drawHex(pos,v)
-	})
+
+		ctx.line([hexRadius + 20, 0], [hexRadius + 20, size[1]])
+		placedHexes.toArray().forEach((v, i) => {
+			var pos = v.key.split(",").map(v => parseInt(v))
+			drawHex(transform(pos), v.value)
+		})
+
+		storageHexes.forEach((v, i) => {
+			var pos = [hexRadius / 2 + 10, hexRadius / 2 + 10 + hexRadius * i]
+			if (i == selectedHex) {
+				ctx.setColor(colors.green)
+				drawHex(pos.add([1, 1]), v)
+				ctx.setColor(colors.white)
+			}
+			drawHex(pos, v)
+		})
+	}
 }
 
 /**
@@ -167,14 +189,14 @@ function transform(pos) {
 	if (pos[0] % 2 == 0) {
 		pos[1] += 0.5
 	}
-	return ctx.getSize().mul(0.5).add(pos.mul(hexRadius).scale([0.75, 0.85])).floor()
+	return ctx.getSize().add([-(20 + hexRadius), 0]).mul(0.5).add(pos.mul(hexRadius).scale([0.75, 0.85])).add([20 + hexRadius, 0])
 }
 /**
   * @param {number[]} pos
   * @returns {number[]}
   */
 function inverseTransform(pos) {
-	var pos = pos.add(ctx.getSize().mul(-0.5)).antiscale([0.75, 0.85]).mul(1 / hexRadius).add([0.5, 0])
+	var pos = pos.add([-(20 + hexRadius), 0]).add(ctx.getSize().add([-(20 + hexRadius), 0]).mul(-0.5)).antiscale([0.75, 0.85]).mul(1 / hexRadius).add([0.5, 0])
 	if (pos[0].floor() % 2 != 0) {
 		pos[1] += 0.5
 	}
@@ -201,33 +223,79 @@ function drawHex(pos, hex) {
  */
 function down(event) {
 	var screenPos = event.getPos()
-	if (screenPos[0] < 20 + hexRadius) {
-		var index = Math.floor((screenPos[1]) / (hexRadius))
-		if (selectedHex == index) selectedHex = null
-		else if (index >= storageHexes.length) selectedHex = null
-		else selectedHex = index
-	} else {
-		var pos = inverseTransform(event.getPos())
-		if (selectedHex == null) {
-			if (!pos.equals([0, 0]) && pos.join(",") in placedHexes) {
-				var hex = placedHexes[pos.join(",")]
-				delete placedHexes[pos.join(",")]
-				storageHexes.push(hex)
-			}
-		} else {
-			if (!(pos.join(",") in placedHexes)) {
-				var newHex = Hex.makeToFit(pos, false)
-				if (!newHex.isEmpty()) {
-					var selHex = storageHexes[selectedHex]
-					var matches = true
-					newHex.mask.forEach((v, i) => {
-						if (v && !selHex.mask[i]) matches = false
-					})
+	if (settings) {
+		var size = ctx.getSize()
+		var localPos = screenPos.antiscale([size[0] / 2, size[1] / 4]).floor()
 
-					if (matches) {
-						placedHexes[pos.join(",")] = selHex
-						storageHexes.splice(selectedHex, 1)
-						selectedHex = null
+		if (localPos[1] == 0) {
+			if (localPos[0] == 0) {
+				genIterations--;
+				if (genIterations < 1) genIterations = 1
+			} else if (localPos[0] == 1) {
+				genIterations++;
+			}
+		}
+		if (localPos[1] == 1) {
+			if (localPos[0] == 0) {
+				maxTiles--;
+				if (genIterations < 1) maxTiles = 1
+			} else if (localPos[0] == 1) {
+				maxTiles++;
+			}
+		}
+		if (localPos[1] == 2) {
+			if (localPos[0] == 0) {
+				minTiles--;
+				if (genIterations < 1) minTiles = 1
+			} else if (localPos[0] == 1) {
+				minTiles++;
+			}
+		}
+		if (localPos[1] == 3) {
+			if (localPos[0] == 0) {
+				settings = false
+			} else if (localPos[0] == 1) {
+				settings = false
+				setup()
+			}
+		}
+	} else {
+		if (screenPos[0] < 20 + hexRadius) {
+			var index = Math.floor((screenPos[1]) / (hexRadius))
+			if (selectedHex == index) selectedHex = null
+			else if (index >= storageHexes.length) selectedHex = null
+			else selectedHex = index
+		} else {
+			var pos = inverseTransform(event.getPos())
+			if (selectedHex == null) {
+				if (!pos.equals([0, 0])) {
+					if (pos.join(",") in placedHexes) {
+						var hex = placedHexes[pos.join(",")]
+						delete placedHexes[pos.join(",")]
+						storageHexes.push(hex)
+					}
+				} else {
+					if (Date.now() - middleClicked < 1000) {
+						settings = true
+					} else {
+						middleClicked = Date.now()
+					}
+				}
+			} else {
+				if (!(pos.join(",") in placedHexes)) {
+					var newHex = Hex.makeToFit(pos, false)
+					if (!newHex.isEmpty()) {
+						var selHex = storageHexes[selectedHex]
+						var matches = true
+						newHex.mask.forEach((v, i) => {
+							if (v && !selHex.mask[i]) matches = false
+						})
+
+						if (matches) {
+							placedHexes[pos.join(",")] = selHex
+							storageHexes.splice(selectedHex, 1)
+							selectedHex = null
+						}
 					}
 				}
 			}
